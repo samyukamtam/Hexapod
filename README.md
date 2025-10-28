@@ -3,8 +3,9 @@
 
 • Designed and implemented inverse kinmetaic and real-time image recognition using YOLO for autonomous loco- motion.
 
-• Project was done as part of MS courses: Mechatronics and Advanced Mechatronics
-Tools: Arduino, Basic Stamp2, Raspberry Pi, ESP-32 with camera module, Robot Kinematics and Inverse Kinematics
+• Project was done as part of MS courses: Mechatronics and Advanced Mechatronics;
+
+• Tools: Arduino, Basic Stamp2, Raspberry Pi, ESP-32 with camera module, Robot Kinematics and Inverse Kinematics
 
 Part 1 
 
