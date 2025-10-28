@@ -1,0 +1,354 @@
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' Pause Constant Parameters
+frame_rate CON 1
+rc_pause CON 1
+
+' Movement Speed Factor
+speed_factor VAR Nib
+speed_factor = 1
+
+' Servo Angle and Speed
+theta VAR Nib(12)
+speed VAR Bit(12)
+
+' Sensor I/P
+flex_index PIN 12
+flex_mid PIN 13
+mems_x PIN 14
+mems_y PIN 15
+
+' Sensor I/P values
+flex_index_result VAR Word
+flex_mid_result VAR Word
+x_result VAR Word
+y_result VAR Word
+
+' Sensor signals
+flex_index_sign VAR Bit
+flex_mid_sign VAR Bit
+x_sign VAR Nib
+y_sign VAR Nib
+
+' state value
+sense_state VAR Byte
+
+' flags
+squat_flag VAR Bit
+swagger_flag VAR Bit
+ctap_flag VAR Nib
+atap_flag VAR Nib
+jiggy_flag VAR Nib
+speed_flag VAR Bit
+
+' loop variables
+i VAR Nib
+t VAR Word
+
+       'FEDCBA9876543210
+DIRS = %0000111111111111
+
+main:
+  GOSUB off                                   'initializing servo positions
+  game:
+    IF t//20 = 0 THEN GOSUB sense             'sensor readings every 20 iterations
+    GOSUB sequence                            'state -> actions
+    GOSUB move                                'PWM signal to servos
+
+    'IF t//25 = 0  THEN GOSUB display         'uncomment to get DEBUG
+
+    t = t + 1                                 'ticker
+    PAUSE frame_rate                          'cycle rate
+  GOTO game
+END
+
+sequence:
+  SELECT sense_state
+    CASE 28
+      GOSUB kill                              'KILL ACTION
+    CASE 22
+      speed_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB squats                            'UP DOWN oscillations
+    CASE 25
+      speed_flag = 0
+      squat_flag = 0
+      jiggy_flag = 0
+      GOSUB swagger                           'Sideways Swaying
+    CASE 30
+      speed_flag = 0
+      squat_flag = 0
+      swagger_flag = 0
+      GOSUB jiggy                             'forward swayin
+    CASE 12
+      speed_flag = 0
+      squat_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB hi                                'waving
+    CASE 16
+      speed_flag = 0
+      squat_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB alt_tap                           'alternative Tapping Legs
+    CASE 13
+      speed_flag = 0
+      squat_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB circle_tap                        'Tapping Legs in a circle
+    CASE 03
+      squat_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB speed_up                          'Increase Speed of Motions
+    CASE 05
+      squat_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB speed_down                        'Decrease Speed of Motions down to 1
+    CASE ELSE
+      speed_flag = 0
+      squat_flag = 0
+      swagger_flag = 0
+      jiggy_flag = 0
+      GOSUB off                               '0 Position
+  ENDSELECT
+RETURN
+
+sense:
+  GOSUB sense_flex_index                      'index finger flexing value
+  GOSUB sense_flex_mid                        'middle finger flexing value
+  GOSUB sense_mems_x                          'Hand x orientation value
+  GOSUB sense_mems_y                          'Hand y orientation value
+
+  'Encode Sensor Signals into a Byte value range:[0, 35] -> 35 possible positions
+  sense_state = (flex_index_sign * 18) + (flex_mid_sign * 9) + (x_sign * 3) + (y_sign)
+RETURN
+
+move:
+  FOR i = 0 TO 11
+    PULSOUT i, (theta(i)*/8534 + 500)         'convert [0,255] theta value to [500,1000] PWM signal for servo motors
+  NEXT
+RETURN
+
+' UNCOMMENT for DEBUG
+display:
+  DEBUG HOME
+  DEBUG "state = ", DEC2 sense_state, CR
+  DEBUG "flex_index = ", DEC2 flex_index_sign, CR
+  DEBUG "flex_middle = ", DEC2 flex_mid_sign, CR
+  DEBUG "x = ", DEC2 x_sign, CR
+  DEBUG "y = ", DEC2 y_sign, CR
+  DEBUG "speed = ", DEC2 speed_factor, CR
+
+  FOR i = 0 TO 11
+    DEBUG "servo ", DEC2 i, " = ", DEC2 theta(i), CR
+  NEXT
+RETURN
+
+sense_flex_index:
+  ' RC Time value for index finger resistive flex sensor
+  HIGH flex_index
+  PAUSE rc_pause
+
+  RCTIME flex_index, 1, flex_index_result
+  IF (flex_index_result = 0) OR flex_index_result > 900 THEN         'Threshold for flex sensor reading -> signal
+    flex_index_sign = 0
+  ELSE
+    flex_index_sign = 1
+  ENDIF
+RETURN
+
+sense_flex_mid:
+  ' RC Time value for middle finger resistive flex sensor
+  HIGH flex_mid
+  PAUSE rc_pause
+
+  RCTIME flex_mid, 1, flex_mid_result
+  IF (flex_mid_result = 0) OR flex_mid_result > 6000 THEN            'Threshold for flex sensor reading -> signal
+    flex_mid_sign = 0
+  ELSE
+    flex_mid_sign = 1
+  ENDIF
+RETURN
+
+sense_mems_x:
+  'x INPUT Digital pulse signal from MX2125 Dual-axis accelerometer
+  PULSIN mems_x, 1, x_result
+  IF x_result <= 2200 THEN
+    x_sign = 0
+  ELSEIF x_result > 2200 AND x_result < 2700 THEN                    'Threshold for accelerometer reading -> signal
+    x_sign = 1
+  ELSE
+    x_sign = 2
+  ENDIF
+RETURN
+
+sense_mems_y:
+  'y INPUT Digital pulse signal from MX2125 Dual-axis accelerometer
+  PULSIN mems_y, 1, y_result
+  IF y_result <= 2200 THEN
+    y_sign = 0
+  ELSEIF y_result > 2200 AND y_result < 2700 THEN                    'Threshold for accelerometer reading -> signal
+    y_sign = 1
+  ELSE
+    y_sign = 2
+  ENDIF
+RETURN
+
+off:
+  FOR i = 0 TO 11
+      theta(i) = 7                    'theta = 7 -> PWM = 750
+      speed(i) = 0                    'set speed direction to (+)
+  NEXT
+RETURN
+
+kill:
+  'TRAPS in stationary loop until RESET
+  DO
+    FOR i = 0 TO 5
+      PULSOUT i, 500
+    NEXT
+    FOR i = 6 TO 11
+      PULSOUT i, 750
+    NEXT
+    PAUSE frame_rate
+  LOOP
+END
+
+squats:
+  FOR i = 0 TO 5
+    'CHECK for transition into SQUAT action v/s coninuing action
+    IF squat_flag = 0 THEN
+      squat_flag = 1
+      FOR i = 0 TO 5
+        'servo angle and speed RESET
+        speed(i) = 0
+        theta(i) = 7
+      NEXT
+    ENDIF
+
+    'if value underflows/overflows then speed is reversed
+    IF (speed(i) = 0)&((theta(i) + speed_factor) > 15) THEN speed(i) = 1
+    IF (speed(i) = 1)&((theta(i) - speed_factor) > 15) THEN speed(i) = 0
+
+    'UPDATE LAW for angle and speed
+    IF speed(i) = 0 THEN theta(i) = theta(i) + speed_factor          'speed bit 0 -> positive speed
+    IF speed(i) = 1 THEN theta(i) = theta(i) - speed_factor          'speed Bit 1 -> negative speed;
+  NEXT
+RETURN
+
+swagger:
+  FOR i = 0 TO 5
+    'staggers initial speed values to create swaying motion
+    IF swagger_flag = 0 THEN
+      swagger_flag = 1
+      FOR i = 0 TO 2
+        speed(i) = 0
+      NEXT
+      FOR i = 3 TO 5
+        speed(i) = 1
+      NEXT
+    ENDIF
+
+    'UPDATE law similar to SQUAT action
+    IF (speed(i) = 0)&((theta(i) + speed_factor) > 15) THEN speed(i) = 1
+    IF (speed(i) = 1)&((theta(i) - speed_factor) > 15) THEN speed(i) = 0
+
+    IF speed(i) = 0 THEN theta(i) = theta(i) + speed_factor
+    IF speed(i) = 1 THEN theta(i) = theta(i) - speed_factor
+  NEXT
+RETURN
+
+jiggy:
+  FOR i = 0 TO 5
+    'CHECK for transition into JIGGY action v/s coninuing action
+    IF jiggy_flag = 0 THEN
+      jiggy_flag = 1
+      FOR i = 0 TO 5
+        speed(i) = 0
+        theta(i) = 7
+      NEXT
+      speed(0) = 1
+      speed(5) = 1
+    ENDIF
+
+    'if value underflows/overflows then speed is reversed
+    IF (speed(i) = 0)&((theta(i) + speed_factor) > 15) THEN speed(i) = 1
+    IF (speed(i) = 1)&((theta(i) - speed_factor) > 15) THEN speed(i) = 0
+
+    'UPDATE LAW for angle and speed
+    IF speed(i) = 0 THEN theta(i) = theta(i) + speed_factor          'speed bit 0 -> positive speed
+    IF speed(i) = 1 THEN theta(i) = theta(i) - speed_factor          'speed Bit 1 -> negative speed;
+  NEXT
+RETURN
+
+' FURTHER ACTIONS
+circle_tap:
+  IF ctap_flag = 6 THEN ctap_flag = 0
+  IF     t//16 <  8 THEN
+    theta(ctap_flag) = theta(ctap_flag) - 1
+  ELSEIF t//16 < 16 THEN
+    theta(ctap_flag) = theta(ctap_flag) + 1
+  ENDIF
+  IF t//16 = 15 THEN
+    ctap_flag = ctap_flag+1
+  ENDIF
+RETURN
+
+alt_tap:
+  FOR atap_flag = 0 TO 2
+    IF     t//32 <  8 THEN
+      theta(2*atap_flag) = theta(2*atap_flag) - 1
+    ELSEIF t//32 < 16 THEN
+      theta(2*atap_flag) = theta(2*atap_flag) + 1
+    ELSEIF t//32 < 24 THEN
+      theta(2*atap_flag+1) = theta(2*atap_flag+1) - 1
+    ELSEIF t//32 < 32 THEN
+      theta(2*atap_flag+1) = theta(2*atap_flag+1) + 1
+    ENDIF
+  NEXT
+RETURN
+
+hi:
+  IF     t//48 < 7  THEN
+    theta(0) = theta(0) - 1
+  ELSEIF t//48 < 16 THEN
+    theta(6) = theta(6) + 1
+  ELSEIF t//48 < 32 THEN
+    theta(6) = theta(6) - 1
+  ELSEIF t//48 < 40 THEN
+    theta(6) = theta(6) + 1
+  ELSEIF t//48 < 47 THEN
+    theta(0) = theta(0) + 1
+  ELSEIF t//48 = 47 THEN
+    theta(0) = 7
+  ENDIF
+RETURN
+
+speed_up:
+  'if transition into speed_up action then speed increased by 3
+  IF speed_flag = 0 THEN
+    speed_flag = 1
+    IF speed_factor < 15 THEN
+      speed_factor = speed_factor + 3
+    ENDIF
+  ENDIF
+RETURN
+
+speed_down:
+  'if transistion into speed_down action then speed reset to 1
+  IF speed_flag = 0 THEN
+    speed_flag = 1
+    IF speed_factor > 1 THEN
+      speed_factor = 1
+    ENDIF
+  ENDIF
+RETURN
+
+
+
